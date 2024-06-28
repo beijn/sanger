@@ -5,6 +5,12 @@
 *RUNNING
 **/.cache
 **/__pycache__
+results
 
 model_export*
 release.zip
+model.zip
+
+
+# required for training but so far only allowed for lab internal usage in Tartu
+data/phaseimaging-combo-v3.onnx 

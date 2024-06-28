@@ -245,11 +245,11 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
 
 
 loader = lambda c, ids, mode: data.mk_loader(ids, bs=1 if mode=='test' else 16, transforms=mkAugs(mode), shuffle=False, cfg=c)
-if P not in ['sigma']: kp2hm, yunnorm = data.mk_kp2mh_yunnorm([1,2,4], cfg_base)
+if P not in ['sigma']: kp2hm, yunnorm, _ymax = data.mk_kp2mh_yunnorm([1,2,4], cfg_base)
 
 for p in [ps[-1]] if DRAFT else ps:
   cfg = obj(**(cfg_base.__dict__ | {P: p}))
-  if P in ['sigma']: kp2hm, yunnorm = data.mk_kp2mh_yunnorm([1,2,4], cfg)
+  if P in ['sigma']: kp2hm, yunnorm, _ymax = data.mk_kp2mh_yunnorm([1,2,4], cfg)
 
   i2p2L = {}
 
@@ -298,7 +298,7 @@ if RELEASE: # save model to disk
   os.remove('model_export/README.md')
 
   # save the model settings
-  with open('model_export/pipeline.json', 'w') as f: json.dump(dict(xmean = _xmean, xstd = _xstd,), f, indent=2)
+  with open('model_export/pipeline.json', 'w') as f: json.dump(dict(xmean=_xmean, xstd=_xstd, ymax=_ymax), f, indent=2)
 
 
 # %% # save the results as csv. exclude model column; plot accuracies

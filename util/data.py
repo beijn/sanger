@@ -67,7 +67,7 @@ def mk_kp2mh_yunnorm(norm_using_images, cfg):
   # Y = ((Y - ymean) / ystd).astype(np.float32)  # unit norm, using dataset wide mean and std
 
   kp2mh = batched(Keypoints2Heatmap(cfg.sigma, ynorm, labels_to_include=[1]))
-  return kp2mh, yunnorm
+  return kp2mh, yunnorm, ymax
 
 
 class CellnetDataset(torch.utils.data.Dataset):

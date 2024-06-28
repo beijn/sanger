@@ -14,12 +14,12 @@ fi
 if [ -d model_export ]; then rm -rf model_export; fi
 cp -r "$path/model_export" model_export
 
-zip -r release.zip "model_export"
+zip -r model.zip "model_export"
 rm -rf "model_export"
-zip -u release.zip release.yml
-zip -u release.zip release.py
+#zip -u release.zip release.yml
+#zip -u release.zip release.py
 
-printf "@ release.yml\n@=environment.yml\n" | zipnote -w release.zip
-printf "@ release.py\n@=main.py\n" | zipnote -w release.zip
+#printf "@ release.yml\n@=environment.yml\n" | zipnote -w release.zip
+#printf "@ release.py\n@=main.py\n" | zipnote -w release.zip
 
-gh release create --target draft "$version" "release.zip" -t "$version" -n "" 
+gh release create --target draft "$version" "model.zip" -t "$version" -n "" -p
