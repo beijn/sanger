@@ -22,4 +22,4 @@ rm -rf "model_export"
 #printf "@ release.yml\n@=environment.yml\n" | zipnote -w release.zip
 #printf "@ release.py\n@=main.py\n" | zipnote -w release.zip
 
-gh release create --target draft "$version" "model.zip" -t "$version" -n "" -p
+gh release create --target main "$version" "model.zip" -t "$version" -n "" -p

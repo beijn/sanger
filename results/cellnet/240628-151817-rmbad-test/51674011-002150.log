@@ -1,0 +1,252 @@
+  ===  RUNNING ./cellnet (rmbad-test) at Fri Jun 28 15:18:21 EEST 2024 ===  
+Fri Jun 28 15:18:22 2024       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.14              Driver Version: 550.54.14      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           Off |   00000000:86:00.0 Off |                    0 |
+| N/A   41C    P0             38W /  250W |       0MiB /  32768MiB |      1%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[jupytext] Reading ./results/./cellnet/240628-151817-rmbad-test-RUNNING/cellnet.py in format py
+[jupytext] Setting kernel python3
+[jupytext] Updating notebook metadata with '{"kernelspec": {"name": "python3", "language": "python", "display_name": "Python 3 (ipykernel)"}}'
+[jupytext] Executing notebook with kernel python3
+Traceback (most recent call last):
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/bin/jupytext", line 10, in <module>
+    sys.exit(jupytext())
+             ^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 497, in jupytext
+    exit_code += jupytext_single_file(nb_file, args, log)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 734, in jupytext_single_file
+    exec_proc.preprocess(notebook, resources=resources)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+
+#def count(y): return yunnorm(y).sum().item()
+
+def accuracy(y,z): 
+  ny, nz = y.sum().item(), z.sum().item()
+  return 1 - abs(ny - nz) / (nz+1e-9)
+
+def train(epochs, model, optim, lossf, sched, kp2hm, traindl, valdl=None, info={}):
+  log = pd.DataFrame(columns='tl vl ta va lr'.split(' '), index=range(epochs))
+  def epoch(dl, train):
+    l = 0; a = 0; b = 0
+    for b, B in enumerate(dl):
+      x,m = B['image'].to(device), B['masks'][0].to(device)
+      z = kp2hm(B).to(device)
+
+      y = model(x)
+      loss = lossf(y*m, z*m) 
+      l += loss.item()
+      a += accuracy(y*m, z*m) # type: ignore
+
+      if train:
+        loss.backward()
+        optim.step()
+        optim.zero_grad()
+
+    return l/(b+1), a/(b+1)
+
+  for e in range(epochs):
+    L = log.loc[e]
+    L['lr'] = optim.param_groups[0]['lr']
+  
+    model.train()
+    L['tl'], L['ta'] = epoch(traindl, train=True)
+    sched.step() 
+  
+    if valdl is not None: 
+      model.eval()
+      with torch.no_grad():
+        L['vl'], L['va'] = epoch(valdl, train=False) 
+
+    if DRAFT: plot.train_graph(e, log, info=info, key2text=key2text, clear=True)
+  plot.train_graph(epochs, log, info=info, key2text=key2text, accuracy=False) 
+  return log
+
+def loss_per_point(b, lossf, kernel=15, exclude=[]):
+  loss = lossf.__class__(reduction='none')(*[torch.tensor(x) for x in [b.y, b.z]])
+
+  p2L = np.zeros(len(b.l))
+  for i, (l, (x,y)) in enumerate(zip(b.l, b.k)):
+    #if l in exclude: continue  # NOTE thats an ugly HACK that prevents us from getting the loss for the negative annotations
+    xx, yy = np.meshgrid(np.arange(loss.shape[2]), np.arange(loss.shape[1]))
+    kernel = (xx-x)**2 + (yy-y)**2 < kernel**2
+    p2L[i] = (loss * kernel).sum()
+
+  return p2L
+
+
+splits = [([1], [2])] if DRAFT else\
+         [([1,2,4], [1])] if RELEASE else\
+         [([1], [2,4])] if IMAGES=='one' else\
+         [([2,4], [1]), ([1,4], [2]), ([1,2], [4])] if IMAGES=='all' else\
+         []
+
+results = pd.DataFrame()
+if not DRAFT: [os.makedirs(_p, exist_ok=True) for _p in ('preds', 'plots')]
+
+def training_run(cfg, traindl, valdl, kp2hm, model=None):
+  global results  
+  p = cfg.__dict__[P]
+  ti=traindl.dataset.ids; vi=valdl.dataset.ids
+
+  if model is None: model = mk_model()
+  optim = torch.optim.Adam(model.parameters(), lr=5e-3)
+  lossf = torch.nn.MSELoss()
+  sched = torch.optim.lr_scheduler.StepLR(optim, step_size=int(cfg.epochs/cfg.lr_steps)+1, gamma=cfg.lr_gamma)
+
+  log = train(cfg.epochs, model, optim, lossf, sched, kp2hm, traindl, valdl, info={P: p})
+
+  _row =  pd.DataFrame(dict(**{P: [p]}, ti=[ti], vi=[vi], **log.iloc[-1]))
+  results = _row if results.empty else pd.concat([results, _row], ignore_index=True)
+
+  i2p2L = {}
+  # plot and save predictions to disk
+  for ii, t in [(ti, 'T'), (vi, 'V')]:
+    for i in ii:
+      B = next(iter(data.mk_loader([i], bs=1, transforms=mkAugs('test'), shuffle=False, cfg=cfg)))
+
+      model.eval()
+      with torch.no_grad(): y = cpu(model(B['image'].to(device)))
+      b = batch2cpu(B, z=kp2hm(B), y=y)[0]
+      del B
+
+      if cfg.rmbad != 0: # get the badly predicted points and plot them
+        p2L = loss_per_point(b, lossf, kernel=15, exclude=[2])
+        if RELEASE or i in vi: 
+          i2p2L[i] = p2L  # only save the losses for the validation image 
+          print(f'DEBUG: saved point losses for val image {i} (should happen only once per cfg and image)')
+
+      if vi==[4] and (i in (1,4)):  # plot T1 and V4 for all [1,2]|[4] runs
+        ax1 = plot.overlay(b.x, b.y, b.m, b.k, b.l, cfg.sigma) 
+        ax2 = plot.diff   (b.y, b.z, b.m, b.k, b.l, cfg.sigma)
+
+        if cfg.rmbad != 0: 
+          rm = np.argsort(-p2L[i])[:int(len(B.l)*cfg.rmbad)]  # type: ignore
+          [plot.points(a, b.k[rm], b.l[rm], color='#00ff00', lw=3)
+            for a in (ax1, ax2)]
+
+        if not DRAFT :  # save but don't show
+          id = f"{P}={p}-{t}{i}"
+          #np.save(f'preds/{id}.npy', y)
+          plot.save(ax1, f'plots/{id}.pred.png')
+          plot.save(ax2, f'plots/{id}.diff.png')
+        if not DRAFT:
+          plt.close('all')
+
+  print(i2p2L)
+  return dict(model=model, log=log, i2p2L=i2p2L)
+
+
+loader = lambda c, ids, mode: data.mk_loader(ids, bs=1 if mode=='test' else 16, transforms=mkAugs(mode), shuffle=False, cfg=c)
+if P not in ['sigma']: kp2hm, yunnorm, _ymax = data.mk_kp2mh_yunnorm([1,2,4], cfg_base)
+
+for p in [ps[-1]] if DRAFT else ps:
+  cfg = obj(**(cfg_base.__dict__ | {P: p}))
+  if P in ['sigma']: kp2hm, yunnorm, _ymax = data.mk_kp2mh_yunnorm([1,2,4], cfg)
+
+  i2p2L = {}
+
+  for ti, vi in splits:
+    cfg = obj(**(cfg.__dict__ | dict(ti=ti, vi=vi)))
+
+    traindl, valdl = loader(cfg, ti, AUGS), loader(cfg, vi, 'val' if AUGS=='train' else 'test')
+
+    out = training_run(cfg, traindl, valdl, kp2hm) # type: ignore
+    i2p2L |= out['i2p2L'] # NOTE: TODO better merge with avg instead of override if image is part of multiple validation sets # type: ignore
+    # NOTE TODO: the bad points are currently only removed during training with splits and not in release mode
+    # -> first confirm with Stuart which points are bad and then remove them in release mode
+
+  # if rmbad is set, remove the bad points and retrain
+  if cfg.rmbad != 0:
+    keep = {i: np.argsort(-p2L)[int(len(p2L)*cfg.rmbad):] for i,p2L in out['i2p2L'].items()} # type: ignore
+    for _i, k in keep.items(): 
+      print(f"DEBUG: keeping {len(k)} of {len(out['i2p2L'][_i])} points for {_i}") # type: ignore
+
+    for ti, vi in splits:
+      cfg = obj(**(cfg.__dict__ | dict(ti=ti, vi=vi, epochs=cfg.epochs//2+1, rmbad=0.1)))
+
+      traindl, valdl = loader(cfg, ti, AUGS), loader(cfg, vi, 'val' if AUGS=='train' else 'test')
+      # remove the hard to predict annotations (only '1')
+      for ds in [traindl.dataset, valdl.dataset]:  # NOTE: because we do it for each split repeatedly its a waste of compute. More efficient: to do it once but would need a compley refactor
+        ds.P = {i: ds.P[i][keep[i]] for i in ds.P} # type: ignore
+        ds.L = {i: ds.L[i][keep[i]] for i in ds.L} # type: ignore
+        ds._generate_masks(fraction=1, sparsity=1) # type: ignore 
+        # regenerate masks, but don't throw away more data
+      
+      out = training_run(cfg, traindl, valdl, kp2hm, model=out['model']) # type: ignore
+------------------
+
+----- stderr -----
+/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:69: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'CPUExecutionProvider'
+  warnings.warn(
+----- stdout -----
+DEBUG: saved point losses for val image 1 (should happen only once per cfg and image)
+{1: array([17.11684227,  0.        ,  0.        , ...,  0.        ,
+        0.        ,  0.        ])}
+----- stdout -----
+DEBUG: saved point losses for val image 2 (should happen only once per cfg and image)
+{2: array([2.35617445e-05, 0.00000000e+00, 0.00000000e+00, ...,
+       0.00000000e+00, 0.00000000e+00, 0.00000000e+00])}
+----- stderr -----
+/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/IPython/core/events.py:82: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+  func(*args, **kwargs)
+----- stderr -----
+/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/IPython/core/pylabtools.py:170: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+  fig.canvas.print_figure(bytes_io, **kw)
+------------------
+
+[0;31m---------------------------------------------------------------------------[0m
+[0;31mUnboundLocalError[0m                         Traceback (most recent call last)
+Cell [0;32mIn[5], line 133[0m
+[1;32m    129[0m   cfg [38;5;241m=[39m obj([38;5;241m*[39m[38;5;241m*[39m(cfg[38;5;241m.[39m[38;5;18m__dict__[39m [38;5;241m|[39m [38;5;28mdict[39m(ti[38;5;241m=[39mti, vi[38;5;241m=[39mvi)))
+[1;32m    131[0m   traindl, valdl [38;5;241m=[39m loader(cfg, ti, AUGS), loader(cfg, vi, [38;5;124m'[39m[38;5;124mval[39m[38;5;124m'[39m [38;5;28;01mif[39;00m AUGS[38;5;241m==[39m[38;5;124m'[39m[38;5;124mtrain[39m[38;5;124m'[39m [38;5;28;01melse[39;00m [38;5;124m'[39m[38;5;124mtest[39m[38;5;124m'[39m)
+[0;32m--> 133[0m   out [38;5;241m=[39m [43mtraining_run[49m[43m([49m[43mcfg[49m[43m,[49m[43m [49m[43mtraindl[49m[43m,[49m[43m [49m[43mvaldl[49m[43m,[49m[43m [49m[43mkp2hm[49m[43m)[49m [38;5;66;03m# type: ignore[39;00m
+[1;32m    134[0m   i2p2L [38;5;241m|[39m[38;5;241m=[39m out[[38;5;124m'[39m[38;5;124mi2p2L[39m[38;5;124m'[39m] [38;5;66;03m# NOTE: TODO better merge with avg instead of override if image is part of multiple validation sets # type: ignore[39;00m
+[1;32m    135[0m   [38;5;66;03m# NOTE TODO: the bad points are currently only removed during training with splits and not in release mode[39;00m
+[1;32m    136[0m   [38;5;66;03m# -> first confirm with Stuart which points are bad and then remove them in release mode[39;00m
+[1;32m    137[0m 
+[1;32m    138[0m [38;5;66;03m# if rmbad is set, remove the bad points and retrain[39;00m
+
+Cell [0;32mIn[5], line 103[0m, in [0;36mtraining_run[0;34m(cfg, traindl, valdl, kp2hm, model)[0m
+[1;32m    100[0m ax2 [38;5;241m=[39m plot[38;5;241m.[39mdiff   (b[38;5;241m.[39my, b[38;5;241m.[39mz, b[38;5;241m.[39mm, b[38;5;241m.[39mk, b[38;5;241m.[39ml, cfg[38;5;241m.[39msigma)
+[1;32m    102[0m [38;5;28;01mif[39;00m cfg[38;5;241m.[39mrmbad [38;5;241m!=[39m [38;5;241m0[39m: 
+[0;32m--> 103[0m   rm [38;5;241m=[39m np[38;5;241m.[39margsort([38;5;241m-[39mp2L[i])[:[38;5;28mint[39m([38;5;28mlen[39m([43mB[49m[38;5;241m.[39ml)[38;5;241m*[39mcfg[38;5;241m.[39mrmbad)]  [38;5;66;03m# type: ignore[39;00m
+[1;32m    104[0m   [plot[38;5;241m.[39mpoints(a, b[38;5;241m.[39mk[rm], b[38;5;241m.[39ml[rm], color[38;5;241m=[39m[38;5;124m'[39m[38;5;124m#00ff00[39m[38;5;124m'[39m, lw[38;5;241m=[39m[38;5;241m3[39m)
+[1;32m    105[0m     [38;5;28;01mfor[39;00m a [38;5;129;01min[39;00m (ax1, ax2)]
+[1;32m    107[0m [38;5;28;01mif[39;00m [38;5;129;01mnot[39;00m DRAFT :  [38;5;66;03m# save but don't show[39;00m
+
+[0;31mUnboundLocalError[0m: cannot access local variable 'B' where it is not associated with a value
+
+
+> Notebook execution time (hhmmss) 002150
