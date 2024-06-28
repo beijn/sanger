@@ -1,0 +1,95 @@
+#!/bin/bash
+
+
+x() {
+  echo
+  echo "❯ $@"
+  $@
+}
+
+push() {
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+
+  # save uncommited changes
+  x git stash save 
+
+  # go to sync 
+  x git branch sync || x git checkout sync
+
+  # merge changes from currently edited branch without commit
+  x git merge -Xtheirs "$branch" --no-commit  
+  x git stash apply  # including copying the uncommited changes
+  #git checkout stash@{0} --theirs .  # still on same branch?
+
+  # commit and push
+  x git add -A .
+    git commit -m "SYNC: push $branch from $HOSTNAME"
+  x git push --set-upstream origin sync
+
+  # go back and restore 
+  x git checkout "$branch"
+  x git stash pop
+}
+
+
+pull() {
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+
+  # check if working tree clean
+  if ! git diff-index --quiet HEAD --; then
+    echo "ERROR: Working tree is not clean. If you want to pull remote changes, please commit or stash your changes"
+    exit 1
+  fi
+
+  #git stash save
+
+  # TODO ensure sync exists in remote
+  # go to sync 
+  x git branch sync || x git checkout sync
+  x git reset  # note that we discard uncommited stuff in the sync branch
+  x git pull --set-upstream origin sync
+
+  x git checkout "$branch"
+  
+  # merge changes from sync into the currently edited branch
+  x git merge -Xtheirs sync --no-commit
+  #x git stash pop
+}
+
+if [ "$1" == "push" ]; then
+  push
+elif [ "$1" == "pull" ]; then
+  pull
+else
+  echo "Usage: $0 [push|pull]"
+fi
+
+
+
+## old variant with rsync
+# LOCAL=~/,
+# REMOTE='uthpc:'
+# REPO=sanger
+#
+# for act in "$@"; do
+#   if [ "$act" == "push" ] || [ "$act" = "push-overwrite" ]
+#   then SRC="$LOCAL/$REPO"; DEST="$REMOTE"
+
+#   elif [ "$act" == "pull" ] || [ "$act" != "pull-overwrite" ]
+#   then SRC="$REMOTE~/$REPO/results"; DEST="$LOCAL/$REPO"
+#   fi
+
+#   if [ "$act" == "push" ] || [ "$act" == "pull" ]
+#   then
+#     rsync -vPzr --executability --filter=':e- .gitignore' --filter "- .git/" \
+#       -e ssh "$SRC" "$DEST"
+
+#   elif [ "$act" == "push-overwrite" ] || [ "$act" == "pull-overwrite" ]
+#   then
+#     echo "WARNING: Possibly removing files in $DEST/$REPO!"
+#     read -p "  >> are you sure? Cancel with ^C <<  " -n 1 -r  
+    
+#     rsync -vPzr --executability --filter=':e- .gitignore' --filter "- .git/" \
+#       -e ssh "$SRC" "$DEST" --delete-after 
+#   fi
+# done

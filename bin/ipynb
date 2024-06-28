@@ -1,0 +1,51 @@
+#!/bin/bash
+#SBATCH -J ipynb
+#SBATCH -t 08:00:00
+#SBATCH --ntasks=1
+#SBATCH --mem=40G
+#SBATCH --cpus-per-task=8
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:tesla:1
+#SBATCH --mail-user=eckhardt
+#SBATCH -A revvity
+#SBATCH -o _____________%j-RUNNING
+
+
+NAME="$1"; INDIR="$2"; INPUT="$3"; OUTDIR="$4"; TAG="$5"
+
+if [ "$INDIR" =  "" ]; then INDIR="."; fi
+if [ "$INDIR" = "." ]
+then ENV="$NAME" 
+else ENV="$(basename "$INDIR")"; fi
+
+echo -e "  ===  RUNNING $INDIR/$NAME ($TAG) at $(date) ===  "
+
+nvidia-smi
+
+conda=micromamba
+$conda shell init --shell=bash                     >/dev/null
+eval "$($conda shell hook --shell=bash)"           >/dev/null 
+$conda activate "$ENV" || $conda activate cellnet  >/dev/null
+
+
+TIMESTAMPFILE="$OUTDIR/TIMESTAMP"
+touch "$TIMESTAMPFILE"
+SECONDS=0
+
+export BATCHED_RUN=1
+jupytext --to notebook --execute -o "$OUTDIR/$NAME.ipynb" "$INPUT"
+
+duration="$SECONDS"
+RUNTIME="$(date -ud "@$duration" +%H%M%S)"
+echo -e "\n> Notebook execution time (hhmmss) $RUNTIME"
+
+if [ -f "$OUTDIR/$NAME.ipynb" ]; then rm "$INPUT"; fi
+find "$OUTDIR" ! -newer "$TIMESTAMPFILE" ! -wholename "$TIMESTAMPFILE" ! -wholename "$INPUT" -delete
+find "$OUTDIR" -name '*.pyc' -delete
+find "$OUTDIR" -depth -type d -empty -delete
+rm -rf "$OUTDIR/.cache"
+rm "$TIMESTAMPFILE"
+
+mv "_____________$SLURM_JOBID-RUNNING" "$OUTDIR/$SLURM_JOBID-$RUNTIME.log"
+
+mv "$OUTDIR" "${OUTDIR%"-RUNNING"}"

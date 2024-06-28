@@ -1,0 +1,46 @@
+name: cellnet
+
+channels:
+- pytorch 
+- nvidia
+- conda-forge
+
+dependencies:
+- python==3.12.*
+
+# running py as ipynb
+- notebook
+- jupytext
+- ipykernel 
+- nbconvert
+
+- numpy<2.0
+- scipy
+- matplotlib
+- seaborn
+- pandas
+- scikit-image
+- colorcet
+
+- pytorch
+- pytorch-cuda
+
+# TODO: maybe replace these
+- segmentation-models-pytorch  # for UNet
+- ipywidgets
+- scikit-learn  
+
+# needed in conda and pip
+- albumentations 
+#- onnx  # ONNX export currently does not support SMP: Unsupported: call_method GetAttrVariable(UnspecializedNNModuleVariable(Sequential), _modules) __setitem__ [ConstantVariable(), NNModuleVariable()] {}
+- onnxruntime
+
+- pip:
+  - albumentations==1.4.7  # newer version than conda
+  - onnxruntime #==1.16  # for fg/bg map
+  # - onnxruntime-gpu  # not supported by pip on HPC?
+  #- onnxscript  # ONNX export currently does not support SMP: Unsupported: call_method GetAttrVariable(UnspecializedNNModuleVariable(Sequential), _modules) __setitem__ [ConstantVariable(), NNModuleVariable()] {}
+  # NOTE has to set python<3.12; can bump to 3.12 when pytorch compile (dynamo export) supports it with pytorch 2.4: https://github.com/pytorch/pytorch/issues/120233 
+
+  - "git+https://github.com/qubvel/segmentation_models.pytorch@bd7f877fec51309a1a7de7670aed232954450037"
+  # NOTE: need this ^ as long as saving loading of smp models is not yet released properly

@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+
+ssh uthpc <<'SSH'
+  if ! type code > /dev/null; then
+    mkdir -p ~/.local/bin
+    curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' |
+      tar -xz -C ~/.local/bin
+    echo 'export PATH=~/.local/bin:"$PATH"' >> ~/.bashrc
+  fi
+  srun -p gpu --gres gpu:tesla:1 --cpus-per-task=8 --mem=36G --time 360 -A revvity \
+    code tunnel --accept-server-license-terms
+SSH

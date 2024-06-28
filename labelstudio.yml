@@ -1,0 +1,9 @@
+name: labelstudio
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pip
+  - pip:
+    - label-studio
+    - label-studio-sdk

@@ -1,0 +1,8 @@
+
+Host uthpc
+  HostName rocket.hpc.ut.ee
+  User eckhardt
+  ServerAliveInterval 90
+  ServerAliveCountMax 5
+  ForwardAgent yes
+

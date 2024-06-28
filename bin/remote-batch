@@ -1,0 +1,4 @@
+#!/bin/bash
+
+ssh -t eckhardt@rocket.hpc.ut.ee "cd sanger && bin/batch $@"
+ssh -t eckhardt@rocket.hpc.ut.ee "watch -n 1 squeue -u eckhardt"

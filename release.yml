@@ -1,0 +1,14 @@
+name: cellnet_release
+channels:
+- conda-forge
+
+dependencies:
+- python==3.12.*
+
+- numpy<2.0
+- opencv
+
+- segmentation-models-pytorch
+- pip:
+  - "git+https://github.com/qubvel/segmentation_models.pytorch@bd7f877fec51309a1a7de7670aed232954450037"
+  # NOTE: need this ^ as long as saving loading of smp models is not yet released properly

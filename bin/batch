@@ -1,0 +1,28 @@
+#!/bin/bash
+# NOTE this is designed to run in the repo root
+# it saves the current state of the repo and submits the job
+
+STARTTIME="$(date +%y%m%d-%H%M%S)"
+INPUT="$1"
+TAG="${2:-?}"
+
+NAME="$(basename "$INPUT" .py)"
+INDIR="$(dirname "$INPUT")"; if [ "$INDIR" =  "" ]; then INDIR="."; fi
+OUTDIR="./results/$INDIR/$NAME/$STARTTIME-$TAG-RUNNING"
+
+echo -e "  ===  PREPARING BATCHJOB $INPUT at $STARTTIME ===  \n"
+
+mkdir -p "$OUTDIR"
+
+rsync -a "." "$OUTDIR" --exclude .git --exclude results --filter=':- .gitignore'
+
+INPUT="$OUTDIR/$NAME.py"
+mv "$OUTDIR/$INDIR/$NAME.py" "$INPUT" 
+
+#if [ -z "$SLURM_JOBID" ]; then
+#  export SLURM_JOBID=local-$(date +%y%m%d-%H%M%S)
+#  bin/ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$TAG" 2>&1 "_____________$SLURM_JOBID-RUNNING"
+#  mv "_____________$SLURM_JOBID-RUNNING" "$OUTDIR/local.log"
+#else 
+sbatch bin/ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$TAG"
+#fi
