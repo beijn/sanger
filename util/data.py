@@ -1,18 +1,14 @@
 # NOTE on data format: this is all BHWC. Except Keypoints2Heatmap which is HWC. Torch needs BCHW, albumentations makes the conversions
 
 
-import numpy as np
-import cv2
+import numpy as np, cv2
 from scipy.ndimage import gaussian_filter, distance_transform_edt
 
-import os
-import torch
-import torch.utils.data
+import torch, torch.utils.data
 
-from collections import defaultdict 
-from types import SimpleNamespace as obj
-import json
+import json, os
 import albumentations as A
+from types import SimpleNamespace as obj
 
 
 noneor = lambda x, d: x if x is not None else d 
@@ -21,6 +17,10 @@ mapd = lambda d,f: {k:f(v) for k,v in d.items()}
 dict2stack = lambda D: np.stack([D[i] for i in sorted(D.keys())], axis=0)
 stack2dict = lambda S, ids: {i:S[idx] for idx,i in enumerate(ids)}
 wrapDictAsStack = lambda f, ids: lambda D: stack2dict(f(dict2stack(D)), ids)
+
+
+def gpu(x, device): return torch.from_numpy(x).float().to(device)
+def cpu(x): return x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.array(x) if isinstance(x, list) else x
 
 
 def batched(f):
@@ -32,6 +32,76 @@ def batched(f):
       ], dim=0)
     return R
   return inner
+
+batch2cpu = lambda B, z=None, y=None: [obj(**{k:cpu(v) for v,k in zip(b, 'xmklzy')}) 
+              for b in zip(B['image'], B['masks'][0], B['keypoints'], B['class_labels'], 
+              *([] if z is None else [z]), *([] if y is None else [y]))]
+
+
+def load_images(ids): return {i: cv2.cvtColor(cv2.imread(f'data/{i}.jpg'), cv2.COLOR_BGR2RGB) for i in ids}
+
+def load_points(path, ids, l2i):
+  P = {i:[] for i in ids}; L = {i:[] for i in ids}
+  for entry in (raw := json.load(open(path))):
+    image_id = int(entry['data']['img'].split('/')[-1][9:].split('.')[0])
+    if image_id not in ids: continue
+    for annotation in entry['annotations']:
+      for result in annotation['result']:
+        x = result['value']['x']/100 * result['original_width']
+        y = result['value']['y']/100 * result['original_height']
+        l = result['value']['keypointlabels'][0]
+        P[image_id] += [(x,y)]
+        L[image_id] += [l2i(l)]
+  return [mapd(v, np.array) for v in (P,L)]
+
+
+class CellnetDataset(torch.utils.data.Dataset):
+  def __init__(self, image_ids, sigma, maxdist, sparsity=1.0, fraction=1.0, batch_size=None, transforms=None, 
+               point_annotations_file='data/points.json', label2int=lambda l:{'Live Cell':1, 'Dead cell/debris':2}[l], 
+               **_junk):
+    super().__init__()
+    self.batch_size = noneor(batch_size, len(image_ids))
+    self.maxdist=maxdist; self.fraction=fraction; self.sparsity=sparsity
+    self.ids=image_ids; self.sigma=sigma; self.label2int=label2int; self.transforms = transforms if transforms else lambda **x:x
+    self.X = load_images(image_ids)  # NOTE albumentations=BHWC 可是 torch=BCHW
+    self.P, self.L = load_points(point_annotations_file, image_ids, label2int)
+    
+    self._generate_masks(fraction=self.fraction, sparsity=self.sparsity)
+
+  def _generate_masks(self, fraction=1.0, sparsity=1.0):
+    assert fraction>0 and sparsity>0, "fraction and sparsity must be positive (0,1]"
+
+    self.M = mask_sparse(self.ids, self.X, self.P, self.L, self.maxdist)
+
+    if (f:=fraction) < 1.0: 
+      _s = self.X[self.ids[0]].shape
+      x,y = int(_s[0]*f), int(_s[1]*f)
+      self.X = mapd(self.X, lambda a: a[:x,:y])
+      self.M = mapd(self.M, lambda a: a[:x,:y])
+
+    # filter out all points outside of X
+    for i in self.ids:
+      P = []; L = []
+      for ((x,y), l) in zip(self.P[i], self.L[i]):
+        if  0 <= x < self.X[i].shape[1]\
+        and 0 <= y < self.X[i].shape[0]:
+          P += [(x,y)]; L += [l]
+      self.P[i] = np.array(P); self.L[i] = np.array(L)
+
+    if (s:=sparsity) < 1.0:
+      self.P = mapd(self.P, lambda a: a[::int(1/s)])
+      self.L = mapd(self.L, lambda a: a[::int(1/s)])
+   
+  def get(self, n): return getattr(self, n)
+  def set(self, n, to): setattr(self, n, to)
+
+  def __len__    (self): return max(self.batch_size, len(self.X))
+  def __getitem__(self, i): 
+    i = self.ids[i % len(self.X)]
+    return self.transforms(image=self.X[i], masks=[self.M[i]], keypoints=self.P[i], class_labels=self.L[i])
+
+  def map(self, f, dim='XY'):
+    for n in dim: self.set(n, f(self.get(n)))
 
 
 def mk_loader(ids, bs, transforms, cfg, shuffle=True):
@@ -70,53 +140,6 @@ def mk_kp2mh_yunnorm(norm_using_images, cfg):
   return kp2mh, yunnorm, ymax
 
 
-class CellnetDataset(torch.utils.data.Dataset):
-  def __init__(self, image_ids, sigma, maxdist, sparsity=1.0, fraction=1.0, batch_size=None, transforms=None, 
-               point_annotations_file='data/points.json', label2int=lambda l:{'Live Cell':1, 'Dead cell/debris':2}[l], 
-               **_junk):
-    super().__init__()
-    self.batch_size = noneor(batch_size, len(image_ids))
-    self.maxdist=maxdist; self.fraction=fraction; self.sparsity=sparsity
-    self.ids=image_ids; self.sigma=sigma; self.label2int=label2int; self.transforms = transforms if transforms else lambda **x:x
-    self.X = load_images(image_ids)  # NOTE albumentations=BHWC 可是 torch=BCHW
-    self.P, self.L = load_points(point_annotations_file, image_ids, label2int)
-    
-    self._generate_masks(fraction=self.fraction, sparsity=self.sparsity)
-
-  def _generate_masks(self, fraction=1.0, sparsity=1.0):
-    assert fraction>0 and sparsity>0, "fraction and sparsity must be positive (0,1]"
-    self.M = mask_sparse(self.ids, self.X, self.P, self.L, self.maxdist)
-
-    if (f:=fraction) < 1.0: 
-      _s = self.X[self.ids[0]].shape
-      x,y = int(_s[0]*f), int(_s[1]*f)
-      self.X = mapd(self.X, lambda a: a[:x,:y])
-      self.M = mapd(self.M, lambda a: a[:x,:y])
-
-    # filter out all points outside of X
-    for i in self.ids:
-      P = []; L = []
-      for ((x,y), l) in zip(self.P[i], self.L[i]):
-        if  0 <= x < self.X[i].shape[1]\
-        and 0 <= y < self.X[i].shape[0]:
-          P += [(x,y)]; L += [l]
-      self.P[i] = np.array(P); self.L[i] = np.array(L)
-
-    if (s:=sparsity) < 1.0:
-      self.P = mapd(self.P, lambda a: a[::int(1/s)])
-      self.L = mapd(self.L, lambda a: a[::int(1/s)])
-   
-  def get(self, n): return getattr(self, n)
-  def set(self, n, to): setattr(self, n, to)
-
-  def __len__    (self): return max(self.batch_size, len(self.X))
-  def __getitem__(self, i): 
-    i = self.ids[i % len(self.X)]
-    return self.transforms(image=self.X[i], masks=[self.M[i]], keypoints=self.P[i], class_labels=self.L[i])
-
-  def map(self, f, dim='XY'):
-    for n in dim: self.set(n, f(self.get(n)))
-
 # HWC - this function works not with a batch dimension
 def Keypoints2Heatmap(sigma, ynorm, labels_to_include=[1]):
   def f(image, masks, keypoints, class_labels):
@@ -129,23 +152,6 @@ def Keypoints2Heatmap(sigma, ynorm, labels_to_include=[1]):
     return torch.from_numpy(ynorm(Y)).permute(2,0,1).to(torch.float32)  # HWC -> CHW
   return f
 
-
-def load_images(ids): return {i: cv2.cvtColor(cv2.imread(f'data/{i}.jpg'), cv2.COLOR_BGR2RGB) for i in ids}
-
-
-def load_points(path, ids, l2i):
-  P = {i:[] for i in ids}; L = {i:[] for i in ids}
-  for entry in (raw := json.load(open(path))):
-    image_id = int(entry['data']['img'].split('/')[-1][9:].split('.')[0])
-    if image_id not in ids: continue
-    for annotation in entry['annotations']:
-      for result in annotation['result']:
-        x = result['value']['x']/100 * result['original_width']
-        y = result['value']['y']/100 * result['original_height']
-        l = result['value']['keypointlabels'][0]
-        P[image_id] += [(x,y)]
-        L[image_id] += [l2i(l)]
-  return [mapd(v, np.array) for v in (P,L)]
 
 # this function expects a batch dim in P and L
 def onehot(hw, P, L):
