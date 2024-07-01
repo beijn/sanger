@@ -213,13 +213,15 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
           i2p2L[i] = p2L  # only save the losses for the validation image 
           print(f'DEBUG: saved point losses for val image {i} (should happen only once per cfg and image)')
 
-      if RELEASE or (vi==[4] and (i in (1,4))):  # plot T1 and V4 for all [1,2]|[4] runs
+      if (RELEASE or vi==[4]) and (i in (1,4)):  # plot T1 and V4 for all [1,2]|[4] runs
         ax1 = plot.overlay(b.x, b.y, b.m, b.k, b.l, cfg.sigma) 
         ax2 = plot.diff   (b.y, b.z, b.m, b.k, b.l, cfg.sigma)
+        ax3 = None
 
         if cfg.rmbad != 0: 
           rm = np.argsort(-p2L[i])[:int(len(b.l)*cfg.rmbad)]
-          for a in (ax1, ax2):
+          ax3 = plot.image(b.x)
+          for a in (ax1, ax2, ax3):
             plot.points(a, b.k[rm], b.l[rm], colormap='#00ff00', lw=3)
            
 
@@ -228,6 +230,7 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
           #np.save(f'preds/{id}.npy', y)
           plot.save(ax1, f'plots/{id}.pred.png')
           plot.save(ax2, f'plots/{id}.diff.png')
+          if ax3 is not None: plot.save(ax3, f'plots/{id}.points.png')
           plt.close('all') # save but don't show
 
   print(i2p2L)
