@@ -1,0 +1,110 @@
+  ===  RUNNING ./cellnet (rmbad) at Mon Jul  1 15:07:17 EEST 2024 ===  
+Mon Jul  1 15:07:18 2024       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.15              Driver Version: 550.54.15      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-SXM2-32GB           Off |   00000000:B3:00.0 Off |                    0 |
+| N/A   33C    P0             55W /  300W |       0MiB /  32768MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[jupytext] Reading ./results/./cellnet/240701-150714-rmbad-RUNNING/cellnet.py in format py
+[jupytext] Setting kernel python3
+[jupytext] Updating notebook metadata with '{"kernelspec": {"name": "python3", "language": "python", "display_name": "Python 3 (ipykernel)"}}'
+[jupytext] Executing notebook with kernel python3
+Traceback (most recent call last):
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/bin/jupytext", line 10, in <module>
+    sys.exit(jupytext())
+             ^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 497, in jupytext
+    exit_code += jupytext_single_file(nb_file, args, log)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 734, in jupytext_single_file
+    exec_proc.preprocess(notebook, resources=resources)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/asyncio/base_events.py", line 684, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+IMAGES = 'all'; AUGS = 'val'
+#P = 'sigma'; ps = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0]
+P = 'rmbad'; ps = [0.15]
+RELEASE = True
+
+
+import torch
+import matplotlib.pyplot as plt
+import numpy as np, pandas as pd
+
+import albumentations as A; from albumentations.pytorch import ToTensorV2
+
+import os, ast, json
+from types import SimpleNamespace as obj
+
+from util.data import *
+import util.plot as plot
+
+
+CUDA = torch.cuda.is_available()
+device = torch.device('cuda:0' if CUDA else 'cpu'); print('device =', device)
+DRAFT = False if os.getenv('BATCHED_RUN', '0')=='1' else True; print('DRAFT =', DRAFT)
+
+
+key2text = {'tl': 'Training Loss',     'vl': 'Validation Loss', 
+            'ta': 'Training Accuracy', 'va': 'Validation Accuracy', 
+            'ti': 'Training Image',    'vi': 'Validation Image',
+            'lf': 'Loss Function',     'lr': 'Learning Rate',
+            'e' : 'Epoch',             'bs': 'Batch Size',
+            'fraction': 'Fraction of Data',  'sparsity': 'Artificial Sparsity',  
+            'sigma': 'Gaussian Sigma',        'maxdist': 'Max Distance',
+            'rmbad': 'Prop. of Difficult Labels Removed'
+            }
+
+CROPSIZE=256
+
+
+cfg_base = obj(
+  epochs=5#(5 if CUDA else 1) if DRAFT else 101 if not RELEASE else 351,
+  sigma=5.0,  # NOTE: do grid search again later when better convergence 
+  maxdist=26, 
+  fraction=1, 
+  sparsity=1,
+  lr_steps=1.25 if not RELEASE else 2.5,
+  lr_gamma=0.1,
+  rmbad=0,
+)
+------------------
+
+
+[0;36m  Cell [0;32mIn[1], line 39[0;36m[0m
+[0;31m    epochs=5#(5 if CUDA else 1) if DRAFT else 101 if not RELEASE else 351,[0m
+[0m           ^[0m
+[0;31mSyntaxError[0m[0;31m:[0m invalid syntax. Perhaps you forgot a comma?
+
+
+
+> Notebook execution time (hhmmss) 000059
+find: cannot delete ‘./results/./cellnet/240701-150714-rmbad-RUNNING’: Directory not empty
