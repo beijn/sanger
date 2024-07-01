@@ -219,8 +219,9 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
 
         if cfg.rmbad != 0: 
           rm = np.argsort(-p2L[i])[:int(len(b.l)*cfg.rmbad)]
-          [plot.points(a, b.k[rm], b.l[rm], color='#00ff00', lw=3)
-            for a in (ax1, ax2)]
+          for a in (ax1, ax2):
+            plot.points(a, b.k[rm], b.l[rm], colormap='#00ff00', lw=3)
+           
 
         if not DRAFT: 
           id = f"{P}={p}-{t}{i}"

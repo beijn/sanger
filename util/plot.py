@@ -31,11 +31,11 @@ def heatmap(hm, ax=None, alpha=lambda value: value, color='#ff0000'):
   return image(out, ax=ax)
 
 
-def points(ax, points, labels=None, radius=7, colormap={1: 'black', 2: '#7700ff'}, marker='o', **scatter_args):
+def points(ax, points, labels=None, radius=8, colormap={1: 'black', 2: '#7700ff'}, marker='o', **scatter_args):
   """"[(x,y), ...]"""
   s = np.pi*radius**2*10000 if marker == 'o' else 10000*radius**2
   if 'lw' in scatter_args: scatter_args['lw']*=100
-  cs = 'black' if labels is None else [colormap[i] for i in labels]
+  cs = 'black' if labels is None else [colormap[i] for i in labels] if type(colormap) is not str else colormap
   ax.scatter(*zip(*points), **dict(facecolors='none', edgecolors=cs, marker=marker, alpha=0.4, s=s, lw=150) | scatter_args)
   
 
