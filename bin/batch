@@ -24,5 +24,5 @@ mv "$OUTDIR/$INDIR/$NAME.py" "$INPUT"
 #  bin/ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$TAG" 2>&1 "_____________$SLURM_JOBID-RUNNING"
 #  mv "_____________$SLURM_JOBID-RUNNING" "$OUTDIR/local.log"
 #else 
-sbatch bin/ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$TAG"
+sbatch -J "$TAG" bin/ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$TAG"
 #fi

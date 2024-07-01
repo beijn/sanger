@@ -40,7 +40,7 @@ CROPSIZE=256
 
 
 cfg_base = obj(
-  epochs=(5 if CUDA else 1) if DRAFT else 101 if not RELEASE else 351,
+  epochs=5#(5 if CUDA else 1) if DRAFT else 101 if not RELEASE else 351,
   sigma=5.0,  # NOTE: do grid search again later when better convergence 
   maxdist=26, 
   fraction=1, 
@@ -211,6 +211,8 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
         p2L = loss_per_point(b, lossf, kernel=15, exclude=[2])
         if RELEASE or i in vi: 
           i2p2L[i] = p2L  # only save the losses for the validation image 
+
+          np.save(f'p2L-{i}.npy', p2L)  # DEBUG dump p2L to disk for later analysis
           print(f'DEBUG: saved point losses for val image {i} (should happen only once per cfg and image)')
 
       if (RELEASE or vi==[4]) and (i in (1,4)):  # plot T1 and V4 for all [1,2]|[4] runs
@@ -220,7 +222,7 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
 
         if cfg.rmbad != 0: 
           rm = np.argsort(-p2L[i])[:int(len(b.l)*cfg.rmbad)]
-          ax3 = plot.image(b.x)
+          ax3 = plot.image(b.x); plot.points(ax3, b.k, b.l)
           for a in (ax1, ax2, ax3):
             plot.points(a, b.k[rm], b.l[rm], colormap='#00ff00', lw=3)
            
@@ -289,7 +291,7 @@ if RELEASE: # save model to disk
   m.save_pretrained('./model_export')  # specific to master branch of SMP. TODO: make more robust with onnx. But see problem notes in cellnet.yml
   os.remove('model_export/README.md')
 
-  with open('model_export/pipeline.json', 'w') as f: json.dump(dict(xmean=_xmean, xstd=_xstd, ymax=_ymax), f, indent=2)
+  with open('model_export/pipeline.json', 'w') as f: json.dump(dict(xmean=_xmean, xstd=_xstd, ymax=float(_ymax)), f, indent=2)
 
 
 # %% # save the results as csv. exclude model column; plot accuracies

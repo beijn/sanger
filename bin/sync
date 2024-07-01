@@ -63,33 +63,3 @@ elif [ "$1" == "pull" ]; then
 else
   echo "Usage: $0 [push|pull]"
 fi
-
-
-
-## old variant with rsync
-# LOCAL=~/,
-# REMOTE='uthpc:'
-# REPO=sanger
-#
-# for act in "$@"; do
-#   if [ "$act" == "push" ] || [ "$act" = "push-overwrite" ]
-#   then SRC="$LOCAL/$REPO"; DEST="$REMOTE"
-
-#   elif [ "$act" == "pull" ] || [ "$act" != "pull-overwrite" ]
-#   then SRC="$REMOTE~/$REPO/results"; DEST="$LOCAL/$REPO"
-#   fi
-
-#   if [ "$act" == "push" ] || [ "$act" == "pull" ]
-#   then
-#     rsync -vPzr --executability --filter=':e- .gitignore' --filter "- .git/" \
-#       -e ssh "$SRC" "$DEST"
-
-#   elif [ "$act" == "push-overwrite" ] || [ "$act" == "pull-overwrite" ]
-#   then
-#     echo "WARNING: Possibly removing files in $DEST/$REPO!"
-#     read -p "  >> are you sure? Cancel with ^C <<  " -n 1 -r  
-    
-#     rsync -vPzr --executability --filter=':e- .gitignore' --filter "- .git/" \
-#       -e ssh "$SRC" "$DEST" --delete-after 
-#   fi
-# done
