@@ -36,7 +36,7 @@ key2text = {'tl': 'Training Loss',     'vl': 'Validation Loss',
             'rmbad': 'Prop. of Difficult Labels Removed'
             }
 
-CROPSIZE=256
+CROPSIZE=256  
 
 
 cfg_base = obj(
