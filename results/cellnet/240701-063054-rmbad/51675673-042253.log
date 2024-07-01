@@ -1,0 +1,87 @@
+  ===  RUNNING ./cellnet (rmbad) at Mon Jul  1 06:30:57 EEST 2024 ===  
+Mon Jul  1 06:30:58 2024       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.15              Driver Version: 550.54.15      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           Off |   00000000:85:00.0 Off |                    0 |
+| N/A   66C    P0             48W /  250W |       0MiB /  32768MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[jupytext] Reading ./results/./cellnet/240701-063054-rmbad-RUNNING/cellnet.py in format py
+[jupytext] Setting kernel python3
+[jupytext] Updating notebook metadata with '{"kernelspec": {"name": "python3", "language": "python", "display_name": "Python 3 (ipykernel)"}}'
+[jupytext] Executing notebook with kernel python3
+Traceback (most recent call last):
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/bin/jupytext", line 10, in <module>
+    sys.exit(jupytext())
+             ^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 497, in jupytext
+    exit_code += jupytext_single_file(nb_file, args, log)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupytext/cli.py", line 734, in jupytext_single_file
+    exec_proc.preprocess(notebook, resources=resources)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 103, in preprocess
+    self.preprocess_cell(cell, resources, index)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 124, in preprocess_cell
+    cell = self.execute_cell(cell, index, store_history=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/asyncio/base_events.py", line 664, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/gpfs/space/home/eckhardt/.micromamba/envs/cellnet/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+if RELEASE: # save model to disk
+  B = next(iter(mk_loader([1], cfg=cfg_base, bs=1, transforms=mkAugs('test'), shuffle=False)))
+  x = batch2cpu(B)[0].x[None]
+  
+  m = out['model'] # type: torch.nn.Module # type: ignore 
+  m.eval()
+
+  # save a test in/out
+  np.save('.cache/export_test_x_1.npy', x)
+  np.save('.cache/export_test_y_1.npy', cpu(m(gpu(x, device=device))))
+
+  m.save_pretrained('./model_export')  # specific to master branch of SMP. TODO: make more robust with onnx. But see problem notes in cellnet.yml
+  os.remove('model_export/README.md')
+
+  with open('model_export/pipeline.json', 'w') as f: json.dump(dict(xmean=_xmean, xstd=_xstd, ymax=_ymax), f, indent=2)
+------------------
+
+
+[0;31m---------------------------------------------------------------------------[0m
+[0;31mAttributeError[0m                            Traceback (most recent call last)
+Cell [0;32mIn[6], line 12[0m
+[1;32m      9[0m np[38;5;241m.[39msave([38;5;124m'[39m[38;5;124m.cache/export_test_x_1.npy[39m[38;5;124m'[39m, x)
+[1;32m     10[0m np[38;5;241m.[39msave([38;5;124m'[39m[38;5;124m.cache/export_test_y_1.npy[39m[38;5;124m'[39m, cpu(m(gpu(x, device[38;5;241m=[39mdevice))))
+[0;32m---> 12[0m [43mm[49m[38;5;241;43m.[39;49m[43msave_pretrained[49m([38;5;124m'[39m[38;5;124m./model_export[39m[38;5;124m'[39m)  [38;5;66;03m# specific to master branch of SMP. TODO: make more robust with onnx. But see problem notes in cellnet.yml[39;00m
+[1;32m     13[0m os[38;5;241m.[39mremove([38;5;124m'[39m[38;5;124mmodel_export/README.md[39m[38;5;124m'[39m)
+[1;32m     15[0m [38;5;28;01mwith[39;00m [38;5;28mopen[39m([38;5;124m'[39m[38;5;124mmodel_export/pipeline.json[39m[38;5;124m'[39m, [38;5;124m'[39m[38;5;124mw[39m[38;5;124m'[39m) [38;5;28;01mas[39;00m f: json[38;5;241m.[39mdump([38;5;28mdict[39m(xmean[38;5;241m=[39m_xmean, xstd[38;5;241m=[39m_xstd, ymax[38;5;241m=[39m_ymax), f, indent[38;5;241m=[39m[38;5;241m2[39m)
+
+File [0;32m~/.micromamba/envs/cellnet/lib/python3.12/site-packages/torch/nn/modules/module.py:1709[0m, in [0;36mModule.__getattr__[0;34m(self, name)[0m
+[1;32m   1707[0m     [38;5;28;01mif[39;00m name [38;5;129;01min[39;00m modules:
+[1;32m   1708[0m         [38;5;28;01mreturn[39;00m modules[name]
+[0;32m-> 1709[0m [38;5;28;01mraise[39;00m [38;5;167;01mAttributeError[39;00m([38;5;124mf[39m[38;5;124m"[39m[38;5;124m'[39m[38;5;132;01m{[39;00m[38;5;28mtype[39m([38;5;28mself[39m)[38;5;241m.[39m[38;5;18m__name__[39m[38;5;132;01m}[39;00m[38;5;124m'[39m[38;5;124m object has no attribute [39m[38;5;124m'[39m[38;5;132;01m{[39;00mname[38;5;132;01m}[39;00m[38;5;124m'[39m[38;5;124m"[39m)
+
+[0;31mAttributeError[0m: 'Unet' object has no attribute 'save_pretrained'
+
+
+> Notebook execution time (hhmmss) 042253

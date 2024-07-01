@@ -38,8 +38,7 @@ dependencies:
 - pip
 - pip:
   - albumentations==1.4.7  # newer version than conda
-  - onnxruntime #==1.16  # for fg/bg map
-  # - onnxruntime-gpu  # not supported by pip on HPC?
+  - onnxruntime-gpu
   #- onnxscript  # ONNX export currently does not support SMP: Unsupported: call_method GetAttrVariable(UnspecializedNNModuleVariable(Sequential), _modules) __setitem__ [ConstantVariable(), NNModuleVariable()] {}
   # NOTE has to set python<3.12; can bump to 3.12 when pytorch compile (dynamo export) supports it with pytorch 2.4: https://github.com/pytorch/pytorch/issues/120233 
 
