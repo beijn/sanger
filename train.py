@@ -2,9 +2,10 @@
 # # CellNet
 
 # %% # Imports 
-IMAGES = 'all'; AUGS = 'val'
+AUGS = 'train'
 #P = 'sigma'; ps = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0]
-P = 'rmbad'; ps = [0.15]
+#P = 'rmbad'; ps = [0.15]
+P = 'bright_aug'; ps = 'True'
 RELEASE = True
 
 
@@ -14,7 +15,7 @@ import numpy as np, pandas as pd
 
 import albumentations as A; from albumentations.pytorch import ToTensorV2
 
-import os, ast, json
+import os, json
 from types import SimpleNamespace as obj
 
 from cellnet.data import *
@@ -38,6 +39,11 @@ key2text = {'tl': 'Training Loss',     'vl': 'Validation Loss',
 
 CROPSIZE=256  
 
+annotated_images = np.array(['data/1.jpg', 'data/2.jpg', 'data/4.jpg']); i=annotated_images
+data_splits = [(i[[0]],  i[[1]])] if DRAFT else\
+                  [(i, i)] if RELEASE else\
+                  [(i[[1,2]], i[[0]]), (i[[0,2]], i[[1]]), (i[[0,1]], i[[2]])] # crossval
+
 
 cfg_base = obj(
   epochs=(5 if CUDA else 1) if DRAFT else 101 if not RELEASE else 351,
@@ -48,11 +54,20 @@ cfg_base = obj(
   lr_steps=1.25 if not RELEASE else 2.5,
   lr_gamma=0.1,
   rmbad=0,
+  xnorm_type='image_per_channel',
+  xnorm_params={},
+  annotated_images=annotated_images,
+  data_splits=data_splits,
+  augs=AUGS,
+  device=device,
+  cropsize=CROPSIZE,
+  draft=DRAFT,
+  **{P: ps[-1]}
 )
 
 # %% # Load Data
-XNorm, _xmean, _xstd = mk_XNorm([1,2,4])
 
+XNorm, cfg_base.xnorm_params = mk_XNorm(cfg_base)
 
 def mkAugs(mode):
   T = lambda ts:  A.Compose(transforms=[
@@ -72,23 +87,24 @@ def mkAugs(mode):
     val   = T([A.RandomCrop(CROPSIZE, CROPSIZE, p=1),
                *vals]),
     train = T([A.RandomCrop(CROPSIZE, CROPSIZE, p=1),
-               # A.RandomSizedCrop(p=1, min_max_height=(CROPSIZE//2, CROPSIZE*2), height=CROPSIZE, width=CROPSIZE),  # NOTE: issue with resize is that the keypoint sizes will not be updated
-               A.Rotate(),
-               A.AdvancedBlur(),
-               A.Equalize(),
-               A.ColorJitter(), 
-               A.GaussNoise(),
+               #A.RandomSizedCrop(p=1, min_max_height=(CROPSIZE//2, CROPSIZE*2), height=CROPSIZE, width=CROPSIZE),  # NOTE: issue with resize is that the keypoint sizes will not be updated
+               #A.Rotate(),
+               #A.AdvancedBlur(),
+               #A.Equalize(),
+               #A.ColorJitter(), 
+               #A.GaussNoise(),
+               A.RandomBrightnessContrast(p=1, brightness_limit=0.25, contrast_limit=0.25),
                *vals])
   )[mode]
 
 
 # %% # Plot data 
 if DRAFT and not CUDA: 
-  kp2hm, yunnorm, _ = mk_kp2mh_yunnorm([1,2,4], cfg_base)
+  kp2hm, yunnorm, _ = mk_kp2mh_yunnorm(cfg_base)
 
   from math import prod
   def plot_grid(grid, **loader_kwargs):
-    loader = mk_loader([1], cfg=cfg_base, bs=prod(grid), **loader_kwargs)
+    loader = mk_loader(cfg_base.annotated_images[[0]], cfg=cfg_base, bs=prod(grid), **loader_kwargs)
     B = next(iter(loader))
     B = batch2cpu(B, z=kp2hm(B))
     for b,ax in zip(B, plot.grid(grid, [CROPSIZE]*2)[1]):
@@ -97,7 +113,7 @@ if DRAFT and not CUDA:
   plot_grid((3,3), transforms=mkAugs('val'))
   plot_grid((3,3), transforms=mkAugs('train'))
 
-  for B in mk_loader([1,2,4], cfg=cfg_base, bs=1, transforms=mkAugs('test'), shuffle=False):
+  for B in mk_loader(image_paths='all', cfg=cfg_base, bs=1, transforms=mkAugs('test'), shuffle=False):
     b = batch2cpu(B, z=kp2hm(B))[0]
     ax = plot.overlay(b.x, b.z, b.m, b.k, b.l, cfg_base.sigma)
  
@@ -181,20 +197,13 @@ def loss_per_point(b, lossf, kernel=15, exclude=[]):
   return p2L
 
 
-splits = [([1], [2])] if DRAFT else\
-         [([1,2,4], [])] if RELEASE else\
-         [([1], [2,4])] if IMAGES=='one' else\
-         [([2,4], [1]), ([1,4], [2]), ([1,2], [4])] if IMAGES=='all' else\
-         []
-
 results = pd.DataFrame()
 if not DRAFT: [os.makedirs(_p, exist_ok=True) for _p in ('preds', 'plots')]
 
 def training_run(cfg, traindl, valdl, kp2hm, model=None):
   global results  
   p = cfg.__dict__[P]
-  ti = traindl.dataset.ids 
-  vi = valdl.dataset.ids if valdl else []
+  ti = cfg.ti; vi = cfg.vi
 
   if model is None: model = mk_model()
   optim = torch.optim.Adam(model.parameters(), lr=5e-3)
@@ -224,10 +233,10 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
         if RELEASE or i in vi: 
           i2p2L[i] = p2L  # only save the losses for the validation image 
 
-        np.save(f'p2L-{i}.npy', p2L)  # DEBUG dump p2L to disk for later analysis
+        np.save(f'p2L-{imgid(i)}.npy', p2L)  # DEBUG dump p2L to disk for later analysis
         print(f'DEBUG: saved point losses for val image {i} (should happen only once per cfg and image)')
 
-      if (RELEASE or vi==[4]) and (i in (1,4)):  # plot T1 and V4 for all [1,2]|[4] runs
+      if (RELEASE or [imgid(_v) for _v in vi]==['4']) and (imgid(i) in ('1','4')):  # plot T1 and V4 for all [1,2]|[4] runs
         ax1 = plot.overlay(b.x, b.y, b.m, b.k, b.l, cfg.sigma) 
         ax2 = plot.diff   (b.y, b.z, b.m, b.k, b.l, cfg.sigma)
         ax3 = None
@@ -240,28 +249,27 @@ def training_run(cfg, traindl, valdl, kp2hm, model=None):
            
 
         if not DRAFT: 
-          id = f"{P}={p}-{t}{i}"
+          id = f"{P}={p}-{t}{imgid(i)}"
           #np.save(f'preds/{id}.npy', y)
           plot.save(ax1, f'plots/{id}.pred.png')
           plot.save(ax2, f'plots/{id}.diff.png')
           if ax3 is not None: plot.save(ax3, f'plots/{id}.points.png')
           plt.close('all') # save but don't show
 
-  print(i2p2L)
   return dict(model=model, log=log, i2p2L=i2p2L)
 
 
 loader = lambda c, ids, mode: mk_loader(ids, bs=1 if mode=='test' else 16, shuffle=False, cfg=c,
     transforms=mkAugs(('val' if AUGS=='train' else 'test') if mode=='_val_' else mode)) 
-kp2hm, yunnorm, _ymax = mk_kp2mh_yunnorm([1,2,4], cfg_base)
+kp2hm, yunnorm, _ymax = mk_kp2mh_yunnorm(cfg_base)
 
 for p in [ps[-1]] if DRAFT else ps:
   cfg = obj(**(cfg_base.__dict__ | {P: p}))
-  if P in ['sigma']: kp2hm, yunnorm, _ymax = mk_kp2mh_yunnorm([1,2,4], cfg)
+  if P in ['sigma']: kp2hm, yunnorm, _ymax = mk_kp2mh_yunnorm(cfg)
 
   i2p2L = {}
 
-  for ti, vi in splits:
+  for ti, vi in data_splits:
     cfg = obj(**(cfg.__dict__ | dict(ti=ti, vi=vi)))
 
     traindl, valdl = loader(cfg, ti, AUGS), loader(cfg, vi, '_val_') if vi else None
@@ -274,7 +282,7 @@ for p in [ps[-1]] if DRAFT else ps:
     
     for _i, k in keep.items(): print(f"DEBUG: keeping {len(k)} of {len(i2p2L[_i])} points for {_i}")
 
-    for ti, vi in splits:
+    for ti, vi in data_splits:
       cfg = obj(**(cfg.__dict__ | dict(ti=ti, vi=vi, epochs=cfg.epochs//2+1, rmbad=0.1)))
 
       traindl, valdl = loader(cfg, ti, AUGS), loader(cfg, vi, '_val_') if vi else None
@@ -309,7 +317,7 @@ if RELEASE: # save model to disk
   m.save_pretrained('./model_export')  # specific to master branch of SMP. TODO: make more robust with onnx. But see problem notes in cellnet.yml
   os.remove('./model_export/README.md')
 
-  with open('./model_export/pipeline.json', 'w') as f: json.dump(dict(xmean=_xmean, xstd=_xstd, ymax=float(_ymax)), f, indent=2)
+  with open('./model_export/settings.json', 'w') as f: json.dump({'ymax':float(_ymax), **cfg_base.__dict__}, f, indent=2)
 
 
 # %% # save the results as csv. exclude model column; plot accuracies

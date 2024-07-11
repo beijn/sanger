@@ -1,9 +1,6 @@
-from collections import defaultdict
 import matplotlib.pyplot as plt
-from IPython.display import clear_output
 import numpy as np
 import itertools as it
-import seaborn as sns
 
 # this code assumes HWC
 
@@ -31,7 +28,7 @@ def heatmap(hm, ax=None, alpha=lambda value: value, color='#ff0000'):
   return image(out, ax=ax)
 
 
-def points(ax, points, labels=None, radius=8, colormap={1: 'black', 2: '#7700ff'}, marker='o', **scatter_args):
+def points(ax, points, labels=None, radius=8.0, colormap={1: 'black', 2: '#7700ff'}, marker='o', **scatter_args):
   """"[(x,y), ...]"""
   s = np.pi*radius**2*10000 if marker == 'o' else 10000*radius**2
   if 'lw' in scatter_args: scatter_args['lw']*=100
@@ -71,14 +68,14 @@ def image(img, ax=None, zoom=None, exact=True, **imshow_kwargs):
   return ax
 
 
-def overlay(x, y=None, m=None, k=None, l=None, sigma=4, ax=None):
+def overlay(x, y=None, m=None, k=None, l=None, sigma=4.0, ax=None):
   ax = image(x, ax=ax)
   if m is not None: heatmap(1-m, ax=ax, alpha=lambda x: 0.5*x, color='#000000')
   if y is not None: heatmap(y, ax=ax, alpha=lambda x: 1.0*x, color='#ff0000')
   if k is not None and l is not None: points(ax, k, l, sigma*2)
   return ax
 
-def diff(y, z, m=None, k=None, l=None, sigma=4, ax=None):
+def diff(y, z, m=None, k=None, l=None, sigma=4.0, ax=None):
   title = f"Difference between Target and Predicted Heatmap"
   D = y-z; D[0, 1,0] = -1; D[0, 1,1] = 1 
   ax = image(D, ax=ax, cmap='coolwarm')
@@ -92,14 +89,16 @@ def save(ax, path, transparent=False):
 
 
 def train_graph(epochs, log, keys=None, clear=False, info={}, key2text={}, accuracy=True, **unknown):
-  if clear: clear_output(wait=True)
+  if clear: 
+    from IPython.display import clear_output
+    clear_output(wait=True)
   log['lr'] /= log['lr'].max()    
 
   _, axs = plt.subplots(_r := 2 if accuracy else 1,1, figsize=(10,7.5*_r))
   if not accuracy: axs = [axs]
 
   for ax, T in zip(axs, ['Loss', 'Accuracy']):
-    ax.set_title(f"Training {T}\n{', '.join([f'{key2text[k]}: {v}' for k,v in [('e', epochs), *info.items()]])}")
+    ax.set_title(f"Training {T}\n{', '.join([f'{key2text.get(k, k)}: {v}' for k,v in [('e', epochs), *info.items()]])}")
 
   for key in (log if keys is None else keys):
     if key in "lr tl vl".split(' '): ax = axs[0]
@@ -114,6 +113,7 @@ def train_graph(epochs, log, keys=None, clear=False, info={}, key2text={}, accur
 
 
 def regplot(R, dim, key2text):
+  import seaborn as sns
   vi=key2text['vi']
   
   fig, axs = plt.subplots(2,2, figsize=(15,10))

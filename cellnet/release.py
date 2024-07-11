@@ -29,8 +29,7 @@ def get_latest_compatible_model_version():
 # TODO: restrict to compatible versions?
 def init_model(version:str|None='latest', keep_download_cache=True):
   cache = os.path.expanduser('~/.cache/cellnet')
-  modeldir = version if type(version) is str and os.path.isdir(version) \
-        else f'{cache}/model_export'
+  modeldir = version if type(version) is str and os.path.isdir(version) else f'{cache}/model_export'
   versionfile = f'{modeldir}/version.json'
 
   # if the version is None, we just use whatever is cached or redownload the latest if it's not cached
@@ -49,32 +48,36 @@ def init_model(version:str|None='latest', keep_download_cache=True):
 
       with open(versionfile, 'w') as f: json.dump({'version': version}, f)
 
-  pipeline_settings = json.load(open(f'{modeldir}/pipeline.json'))
+  settings = json.load(open(f'{modeldir}/settings.json'))
   model = smp.Unet.from_pretrained(f'{modeldir}')
-  setattr(model, 'pipline_settings', pipeline_settings)
+  setattr(model, 'settings', settings)
   setattr(model, 'version', version)
-  print('Model loaded version:', version)
+  print('Model version:', version)
   return model.to(DEVICE)
 
-def load_image(image_file_descriptor, pipline_settings, norm_with_train_statistics=True):
+def load_image(image_file_descriptor, model_settings):
   X = np.array(Image.open(image_file_descriptor))
-  if norm_with_train_statistics:
-    mean, std = [np.array(pipline_settings[k], dtype=np.float32)  * 255   for k in ('xmean', 'xstd')]
-  else:  # calculate mean and std from the image 
-    mean, std = X.mean(axis=(0,1)), X.std(axis=(0,1))
-  return ((X - mean) / std).transpose(2, 0, 1)
+  match model_settings['xnorm_type']:
+    case 'imagenet': 
+      m, s = [np.array(model_settings['xnorm_params'][k], dtype=np.float32)  * 255   for k in ('mean', 'std')]
+      return ((X - m) / s).transpose(2, 0, 1)
+    case 'image_per_channel':  
+      m, s = X.mean(axis=(0,1)), X.std(axis=(0,1))
+      return ((X - m) / s).transpose(2, 0, 1)
+    case other: raise ValueError(f"Unknown xnorm_type '{other}' in model.settings")
 
-def count(images, model=None, plot=True, norm_with_train_statistics=True):
+
+def count(images, model=None, plot=True):
   if model is None or type(model) == str:  
     model = init_model(model)
   model.eval()  # important
 
   counts = {}; plots = {}
   for image in images:
-    X = load_image(image, model.pipline_settings, norm_with_train_statistics)[None]
+    X = load_image(image, model.settings)[None]
     Y = model(torch.tensor(X).float().to(DEVICE)).detach().cpu().numpy()
 
-    counts[image.name] = np.sum(Y)*model.pipline_settings["ymax"]
+    counts[image.name] = np.sum(Y)*model.settings["ymax"]
     if plot: plots[image.name] = plotting.overlay(X[0], Y[0])
 
   return counts, plots
@@ -97,7 +100,7 @@ if __name__ == '__main__':
   os.makedirs('plots', exist_ok=True)
   for path in image_paths: 
     with open(path, 'rb') as f:
-      cs, plots = count([f], model, plot=True, norm_with_train_statistics=False)
+      cs, plots = count([f], model, plot=True)
       counts |= cs 
       plotting.save(plots[path], os.path.join('plots', os.path.basename(path.removesuffix('.jpg')+'.png')))
 

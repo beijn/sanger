@@ -1,6 +1,7 @@
 # NOTE on data format: this is all BHWC. Except Keypoints2Heatmap which is HWC. Torch needs BCHW, albumentations makes the conversions
 
 
+import pathlib
 import numpy as np, cv2
 from scipy.ndimage import gaussian_filter, distance_transform_edt
 
@@ -23,6 +24,8 @@ def gpu(x, device): return torch.from_numpy(x).float().to(device)
 def cpu(x): return x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.array(x) if isinstance(x, list) else x
 
 
+def imgid(path): return pathlib.Path(path).stem
+
 def batched(f):
   def inner(B):
     n_masks = len(B['masks'])
@@ -38,7 +41,7 @@ batch2cpu = lambda B, z=None, y=None: [obj(**{k:cpu(v) for v,k in zip(b, 'xmklzy
               *([] if z is None else [z]), *([] if y is None else [y]))]
 
 
-def load_images(ids): return {i: cv2.cvtColor(cv2.imread(f'data/{i}.jpg'), cv2.COLOR_BGR2RGB) for i in ids}
+def load_images(paths): return {imgid(p): cv2.cvtColor(cv2.imread(p), cv2.COLOR_BGR2RGB) for p in paths}
 
 def load_points(path, ids, l2i):
   P = {i:[] for i in ids}; L = {i:[] for i in ids}
@@ -56,15 +59,15 @@ def load_points(path, ids, l2i):
 
 
 class CellnetDataset(torch.utils.data.Dataset):
-  def __init__(self, image_ids, sigma, maxdist, sparsity=1.0, fraction=1.0, batch_size=None, transforms=None, 
+  def __init__(self, image_paths, sigma, maxdist, sparsity=1.0, fraction=1.0, batch_size=None, transforms=None, 
                point_annotations_file='data/points.json', label2int=lambda l:{'Live Cell':1, 'Dead cell/debris':2}[l], 
                **_junk):
     super().__init__()
-    self.batch_size = noneor(batch_size, len(image_ids))
+    self.batch_size = noneor(batch_size, len(image_paths))
     self.maxdist=maxdist; self.fraction=fraction; self.sparsity=sparsity
-    self.ids=image_ids; self.sigma=sigma; self.label2int=label2int; self.transforms = transforms if transforms else lambda **x:x
-    self.X = load_images(image_ids)  # NOTE albumentations=BHWC 可是 torch=BCHW
-    self.P, self.L = load_points(point_annotations_file, image_ids, label2int)
+    self.ids=[imgid(p) for p in image_paths]; self.sigma=sigma; self.label2int=label2int; self.transforms = transforms if transforms else lambda **x:x
+    self.X = load_images(image_paths)  # NOTE albumentations=BHWC 可是 torch=BCHW
+    self.P, self.L = load_points(point_annotations_file, self.ids, label2int)
     
     self._generate_masks(fraction=self.fraction, sparsity=self.sparsity)
 
@@ -104,7 +107,7 @@ class CellnetDataset(torch.utils.data.Dataset):
     for n in dim: self.set(n, f(self.get(n)))
 
 
-def mk_loader(ids, bs, transforms, cfg, shuffle=True):
+def mk_loader(image_paths, bs, transforms, cfg, shuffle=True):
   def collate(S):
     return dict(
       image = torch.stack([s['image'] for s in S]),
@@ -113,19 +116,26 @@ def mk_loader(ids, bs, transforms, cfg, shuffle=True):
       class_labels = [s['class_labels'] for s in S],
     )
 
+  if image_paths=='all': image_paths = cfg.annotated_images
   from torch.cuda import device_count as gpu_count; from multiprocessing import cpu_count 
-  return torch.utils.data.DataLoader(CellnetDataset(ids, transforms=transforms, batch_size=bs, **cfg.__dict__), 
+  return torch.utils.data.DataLoader(CellnetDataset(image_paths, transforms=transforms, batch_size=bs, **cfg.__dict__), 
     batch_size=bs, shuffle=shuffle, collate_fn=collate, pin_memory=True, num_workers=8) # TODO: figure out and fix error and change back #8 if torch.cuda.is_available() else 2)
 
 
-def mk_XNorm(norm_using_images):
+def mk_XNorm(cfg, norm_using_images='all'):
+  if norm_using_images == 'all': norm_using_images = cfg.annotated_images
   X = dict2stack(load_images(norm_using_images))
-  m = list(X.mean(axis=(0,1,2))/255); s = list(X.std(axis=(0,1,2))/255)
-  return (lambda **kw: A.Normalize(mean=m, std=s, **kw)), m, s
+  params = dict(
+    mean = list(X.mean(axis=(0,1,2))/255),
+    std  = list(X.std (axis=(0,1,2))/255),
+  )
+
+  return (lambda **kw: A.Normalize(normalization='standard' if cfg.xnorm_type=='imagenet' else cfg.xnorm_type, **params, **kw)), params
 
 
-def mk_kp2mh_yunnorm(norm_using_images, cfg):
+def mk_kp2mh_yunnorm(cfg, norm_using_images='all'):
   """Z-score norm improves DNN training according to @lecun2002efficient. BWHC"""
+  if norm_using_images == 'all': norm_using_images = cfg.annotated_images
   ds = CellnetDataset(norm_using_images, **cfg.__dict__)
 
   Y = np.stack([Keypoints2Heatmap(cfg.sigma, ynorm=lambda y:y, labels_to_include=[1])(x.transpose(2,0,1),[m],p,l) 

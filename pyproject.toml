@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "numpy<2.0.0",
     "Pillow",
+    "matplotlib",   
     "segmentation-models-pytorch@git+https://github.com/qubvel/segmentation_models.pytorch#egg=bd7f877fec51309a1a7de7670aed232954450037",
 ]
 
