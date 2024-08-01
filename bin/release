@@ -17,10 +17,7 @@ if [ -z "$path" ] || [ -z "$version" ]; then
     exit 1
 fi
 
-if [ -d model_export ]; then rm -rf model_export; fi
-cp -r "$path/model_export" model_export
+cd "$path"
+zip -r model.zip model_export
 
-zip -r model.zip "model_export"
-rm -rf "model_export"
-
-gh release create --target draft "$version" "model.zip" -t "$version" -n ""  --latest
+gh release create --target draft "$version" model.zip -t "$version" -n ""  --latest

@@ -1,0 +1,38 @@
+#!/bin/bash
+# NOTE this is designed to run in the repo root
+# it saves the current state of the repo and submits the job
+
+MODE="$1"
+INPUT="$2"
+EXPERIMENT="$3"
+RELEASE_MODE="$4"
+
+source bin/init_shell
+if [ "$MODE" == "remote" ]; then
+  echo "NOTE: Forwarding job to \$HPC_HOST=$HPC_HOST (set in bin/init_shell)"
+  ssh -t "$HPC_HOST" "cd cellnet && bin/submit-job "${@:2}" && watch -n 1 squeue -u \$USER"
+  exit 1
+fi
+
+STARTTIME="$(date +%y%m%d-%H%M%S)"
+
+NAME="$(basename "$INPUT" .py)"
+INDIR="$(dirname "$INPUT")"; if [ "$INDIR" =  "" ]; then INDIR="."; fi
+OUTDIR="./results/$INDIR/$NAME/$STARTTIME-$EXPERIMENT"
+if [ "$RELEASE_MODE" != "" ]; then OUTDIR="$OUTDIR-$RELEASE_MODE"; fi
+OUTDIR="$OUTDIR-RUNNING"
+
+mkdir -p "$OUTDIR"
+rsync -a "." "$OUTDIR" --exclude .git --exclude results
+
+INPUT="$OUTDIR/$NAME.py"
+mv "$OUTDIR/$INDIR/$NAME.py" "$INPUT"  2>/dev/null
+
+if [ "$MODE" == "sbatch" ]; then
+  out="$(sbatch -J "$EXPERIMENT" $SBATCH_ARGS bin/job-ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$EXPERIMENT" "$RELEASE_MODE")"
+  echo -e "\033[1;32m$out $NAME:$EXPERIMENT ($RELEASE_MODE) at $STARTTIME\033[0m"
+elif [ "$MODE" == "local" ]; then
+  echo -e "\033[1;32mRunning job in current node $NAME:$EXPERIMENT ($RELEASE_MODE) at $STARTTIME\033[0m"
+  bin/job-ipynb "$NAME" "$INDIR" "$INPUT" "$OUTDIR" "$EXPERIMENT" "$RELEASE_MODE"
+else echo "Usage: ./bin/submit-job [remote] local|sbatch <notebook> <experiment> <release-mode>"; exit 1;
+fi

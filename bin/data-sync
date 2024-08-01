@@ -1,0 +1,10 @@
+#!/bin/bash
+source bin/init_shell
+
+pushorpull={$1:-push}
+if [ $pushorpull == "push" ]; then
+    rsync -av --progress ./data/ "$HPC_HOST:cellnet/data" # --exclude './data/cache'
+elif [ $pushorpull == "pull" ]; then
+    rsync -av --progress "$HPC_HOST:~/cellnet/data/" ./data/ # --exclude './data/cache'
+else echo "Usage: data-sync [push|pull]"
+fi

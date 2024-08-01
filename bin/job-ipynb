@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH -J ipynb
+#SBATCH -o _____________%j-RUNNING
+#SBATCH --ntasks=1
+#SBATCH -t 12:00:00
+
+
+NAME="$1"; INDIR="$2"; INPUT="$3"; OUTDIR="$4"; EXPERIMENT="$5"; RELEASE_MODE="$6"
+
+if [ "$INDIR" =  "" ]; then INDIR="."; fi
+#if [ "$INDIR" = "." ]
+#then ENV="$NAME" 
+#else ENV="$(basename "$INDIR")"; fi
+ENV=cellnet
+
+echo -e "  ===  RUNNING $INDIR/$NAME:$EXPERIMENT ($RELEASE_MODE) at $(date) ===  "
+
+nvidia-smi
+
+source bin/init_conda 
+$conda activate "$ENV" || $conda activate cellnet
+
+
+TIMESTAMPFILE="$OUTDIR/TIMESTAMP"
+echo "$SLURM_JOBID" > "$TIMESTAMPFILE"
+SECONDS=0
+
+export EXPERIMENT="$EXPERIMENT"
+export RELEASE_MODE="$RELEASE_MODE"
+
+# TODO: monitor peak GPU usage during execution so that we can optimize the memory requirements
+jupytext --to notebook --execute -o "$OUTDIR/$NAME.ipynb" "$INPUT"
+
+duration="$SECONDS"
+RUNTIME="$(date -ud "@$duration" +%H%M%S)"
+echo -e "\n> Notebook execution time (hhmmss) $RUNTIME"
+
+if [ -f "$OUTDIR/$NAME.ipynb" ]; then rm "$INPUT"; fi
+find "$OUTDIR" ! -newer "$TIMESTAMPFILE" ! -wholename "$TIMESTAMPFILE" ! -wholename "$INPUT" -delete 2>/dev/null
+find "$OUTDIR" -name '*.pyc' -delete 2>/dev/null
+find "$OUTDIR" -depth -type d -empty -delete 2>/dev/null
+rm -rf "$OUTDIR/.cache"
+mv "_____________$SLURM_JOBID-RUNNING" "$OUTDIR/$SLURM_JOBID-$RUNTIME.log"
+rm "$TIMESTAMPFILE"
+mv "$OUTDIR" "${OUTDIR%"-RUNNING"}"
+# TODO: label failed jobs as failed
+# TODO: label aborted jobs

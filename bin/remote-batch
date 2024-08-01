@@ -1,3 +1,0 @@
-#!/bin/bash
-
-ssh -t eckhardt@rocket.hpc.ut.ee "cd cellnet && bin/batch $@ && watch -n 1 squeue -u eckhardt"

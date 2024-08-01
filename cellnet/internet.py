@@ -40,17 +40,17 @@ class GHAPI(object):
     return decorator
   
   @ghapi('releases/latest')
-  def get_latest_release(response): 
-    return response["tag_name"]  # type: ignore
+  def get_latest_release(response) -> str: 
+    return response["tag_name"] # type: ignore
 
   @ghapi('releases', paging=100)
-  def get_all_releases(response): 
+  def get_all_releases(response) -> list[str]: 
     # sort by release date 
-    response = sorted(response, key=lambda x: x['published_at'], reverse=True)
+    response = sorted(response, key=lambda x: x['published_at'], reverse=True)  # type: ignore
     return [r['tag_name'] for r in response]  # type: ignore
   
 
-def download(url, filename, overwrite=False):
+def download(url, filename, what='', overwrite=False):
   import tqdm
 
   if os.path.isdir(filename): filename = os.path.join(filename, url.split('/')[-1])
@@ -62,11 +62,13 @@ def download(url, filename, overwrite=False):
         r.raise_for_status()
         total = int(r.headers.get('content-length', 0))
 
-        with tqdm.tqdm(desc='Download', total=total, unit='B', unit_scale=True, unit_divisor=1024) as pb:
+        with tqdm.tqdm(desc=f'Download {what}', total=total, unit='B', unit_scale=True, unit_divisor=1024) as pb:
           for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
             pb.update(len(chunk))
   except Exception as e:
     os.remove(filename)
-    raise e
+    match e.__class__:
+      case requests.exceptions.HTTPError if str(e).startswith('404'): raise FileNotFoundError(f"404 URL for {what} not found: {url}.")
+      case _: raise e
   

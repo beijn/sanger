@@ -10,9 +10,9 @@ build
 *egg-info
 dist
 
-results 
 model_export*
 release.zip
 model.zip
 
 data
+results 

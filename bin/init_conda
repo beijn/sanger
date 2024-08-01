@@ -1,0 +1,18 @@
+#!/bin/bash
+source bin/init_shell
+
+if type micromamba > /dev/null; then 
+  conda=micromamba
+  $conda shell init --shell=bash                     >/dev/null
+  eval "$($conda shell hook --shell=bash)"           >/dev/null 
+elif type mamba      > /dev/null; then 
+  conda=mamba
+  eval "$(command $conda 'shell.bash' 'hook' 2> /dev/null)"
+  $conda init bash
+elif type conda      > /dev/null; then 
+  conda=conda
+  eval "$(command $conda 'shell.bash' 'hook' 2> /dev/null)"
+  $conda init bash
+else echo "WARN No micromamba, mamba or conda found."; fi
+
+export conda="$conda"
