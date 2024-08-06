@@ -37,11 +37,10 @@ def init_model(version:str|None='latest', keep_download_cache=True):
   modeldir = version if type(version) is str and os.path.isdir(version) else f'{cache}/model_export'
   versionfile = f'{modeldir}/version.json'
   prexisting_version = json.load(open(versionfile))['version'] if os.path.isfile(versionfile) else None
-  if version == None: version = 'latest'
   islatest = version == 'latest'
 
-  # if the version is None, we just use whatever is cached or redownload the latest if it's not cached
-  if not (version == None and os.path.isdir(modeldir)): 
+  # if we don't have the model locally
+  if not os.path.isdir(modeldir): 
     if version == 'latest': 
       version = GH.get_latest_release()
       if not is_compatible(version):
@@ -64,7 +63,8 @@ def init_model(version:str|None='latest', keep_download_cache=True):
       if not keep_download_cache: os.remove(f'{cache}/model-{version}.zip')
 
       with open(versionfile, 'w') as f: json.dump({'version': version}, f)
-  else: version = prexisting_version
+  elif prexisting_version != None:
+    version = prexisting_version
 
   settings = json.load(open(f'{modeldir}/settings.json'))
 
@@ -79,7 +79,6 @@ def init_model(version:str|None='latest', keep_download_cache=True):
            'smp.MAnet': smp.MAnet,
            'smp.PAN': smp.PAN,
            }[model_class].from_pretrained(f'{modeldir}')  ## TODO make class dynamic depending on settings
-  
   
   setattr(model, 'settings', settings)
   setattr(model, 'version', version)
