@@ -73,6 +73,7 @@ bin/submit-job [remote] sbatch|local <notebook> <experiment> <release-mode>
 [bin/submit-job](./bin/submit-job) creates a snapshot copy of the current repository state and submits a job to run the `<notebook>` with the specified `<experiment>` and `<release-mode>` settings. The resulting notebook and all its outputs are saved under [`results/<notebook>/STARTDATE-<experiment>-<release-mode>`](./results/train).
 - if `remote`, the notebook will be run on the remote cluster
 - `sbatch` will submit a job to run the notebook to slurm's sbatch
+- `bsub` will submit a job to run the notebook to LSF's bsub
 - `local` will run the notebook in the current shell
 - `<notebook>` should be without the `.py` or `.ipynb` extension
 - `<experiment>` defines experiment settings in train.py
